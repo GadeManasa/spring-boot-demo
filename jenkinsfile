@@ -1,0 +1,72 @@
+pipeline {                                // Declarative pipeline starts (structured, safe subset of Groovy)
+
+  agent any                               // Run on any available agent node (executor). Could also be 'label "linux"'.
+
+  tools {                                 // Ask Jenkins to provision named tools you configured under Manage Jenkins → Tools
+    maven 'maven3'                        // Use Maven installation named "maven3"
+    jdk   'Java17'                        // Use JDK installation named "Java17"
+  }
+
+  options {                               // Pipeline-wide behaviors
+    timestamps()                          // Prefix console output with times
+    buildDiscarder(logRotator(numToKeepStr: '20')) // Keep only last 20 builds to save disk
+    // other useful ones: timeout(time: 30, unit: 'MINUTES'), ansiColor('xterm')
+  }
+
+  environment {                           // (Optional) Key=Value env vars for all stages
+    // EXAMPLE_API = credentials('my-secret-id') // or plain: FOO = 'bar'
+  }
+
+  parameters {                            // (Optional) Inputs shown on “Build with Parameters”
+    // string(name: 'GREETING', defaultValue: 'hi', description: '...')
+  }
+
+  triggers {                              // (Optional) Auto-run policies
+    // pollSCM('H/5 * * * *')             // or githubPush()
+  }
+
+  stages {                                // Ordered list of stages in your build
+    stage('Checkout') {                   // A named stage
+      steps {                             // What to do inside the stage
+        // If job is "Pipeline from SCM", you can just do: checkout scm
+        git branch: 'main', url: 'https://github.com/GadeManasa/spring-boot-demo'
+      }
+    }
+
+    stage('Build') {
+      steps {
+        sh 'chmod +x mvnw'
+        sh './mvnw -v'
+        sh './mvnw clean install -DskipTests'
+      }
+    }
+
+    stage('Test') {
+      steps {
+        sh './mvnw test'
+      }
+      post {                              // Post-actions just for this stage
+        always {
+          junit '**/target/surefire-reports/*.xml'   // Publish JUnit reports so Jenkins shows pass/fail properly
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        sh 'ls -lah target || true'       // Show built artifacts (JAR/WAR) in the console
+      }
+    }
+
+    // You can add more stages: Lint, Sonar, Docker build, Deploy, etc.
+  }
+
+  post {                                   // Post-actions for the whole pipeline
+    success {
+      archiveArtifacts artifacts: 'target/*.jar, target/*.war', fingerprint: true
+      // makes your JAR/WAR downloadable from the build; fingerprint helps track artifacts across jobs
+    }
+    // also available: failure { ... }, always { ... }, unstable { ... }, changed { ... }
+  }
+}
+
