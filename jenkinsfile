@@ -1,10 +1,64 @@
 pipeline {
-  agent any
+  agent any   // run on any available Jenkins agent (executor)
+
+  tools {
+    maven 'maven3'    // must match Maven installation name in Jenkins Tools
+    jdk   'Java17'    // must match JDK installation name in Jenkins Tools
+  }
+
+  options {
+    timestamps()      // add timestamps in console output
+    buildDiscarder(logRotator(numToKeepStr: '20')) // keep only last 20 builds
+    // timeout(time: 30, unit: 'MINUTES')   // (optional) kill build if >30 min
+    // ansiColor('xterm')                   // (optional) colorful logs
+  }
+
+  environment {
+    // Example: FOO = 'bar'
+    // You can also inject secrets here if needed
+  }
+
+  triggers {
+    // pollSCM('H/5 * * * *')    // poll every 5 min (disable if using webhook)
+    // githubPush()              // trigger on GitHub push webhook
+  }
+
   stages {
-    stage('Sanity') {
+
+    stage('Checkout') {
       steps {
-        echo 'ok'
+        // if Pipeline job is "from SCM", can just do: checkout scm
+        git branch: 'main', url: 'https://github.com/GadeManasa/spring-boot-demo'
       }
     }
-  }
-}
+
+    stage('Build') {
+      steps {
+        sh 'chmod +x mvnw'                     // ensure wrapper is executable
+        sh './mvnw -v'                         // show Maven version
+        sh './mvnw clean install -DskipTests'  // build project, skip tests
+      }
+    }
+
+    stage('Test') {
+      steps {
+        sh './mvnw test'                       // run tests
+      }
+      post {
+        always {
+          // publish JUnit reports so Jenkins shows test results
+          junit '**/target/surefire-reports/*.xml'
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        sh 'ls -lah target || true'            // list built artifacts
+      }
+    }
+
+    // Optional: run app briefly (smoke test)
+    // stage('Smoke Test') {
+    //   steps {
+    //     sh 'nohup java
